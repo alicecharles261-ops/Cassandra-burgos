@@ -23,7 +23,7 @@ export function PropertyCard({ p, variant = "default" }: { p: Property; variant?
       params={{ slug: p.slug }}
       className="group block bg-card shadow-card hover:shadow-luxury transition-all duration-500"
     >
-      <div className="relative aspect-[4/3] overflow-hidden bg-muted">
+      <div className="relative aspect-square overflow-hidden bg-muted">
         <img
           src={p.image}
           alt={`${p.title} — ${p.city}, ${p.state}`}
