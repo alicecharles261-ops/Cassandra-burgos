@@ -7,8 +7,6 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instantiate createClient with right options
-  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
     PostgrestVersion: "14.5"
   }
@@ -54,21 +52,44 @@ export type Database = {
           created_at: string
           date_label: string | null
           description: string
+          documents: string[]
+          energy_rating: string | null
           features: string[]
           gallery_keys: string[]
           garage: number | null
+          google_maps_url: string | null
           id: string
           image_key: string
+          is_archived: boolean
+          is_draft: boolean
           is_featured: boolean
+          is_hidden: boolean
+          is_published: boolean
+          latitude: number | null
+          lease_price: string | null
+          longitude: number | null
+          lot_size: string | null
           mls: string | null
+          nearby_hospitals: string[]
+          nearby_restaurants: string[]
+          nearby_schools: string[]
+          nearby_shopping: string[]
+          open_house_date: string | null
+          open_house_time: string | null
           price: string
+          seo_description: string | null
+          seo_keywords: string | null
+          seo_title: string | null
           slug: string
           sort_order: number
           sqft: number | null
           state: string
           status: Database["public"]["Enums"]["property_status"]
+          stories: number | null
           title: string
           type: string
+          video_url: string | null
+          virtual_tour_url: string | null
           year_built: number | null
           zip: string
         }
@@ -81,21 +102,44 @@ export type Database = {
           created_at?: string
           date_label?: string | null
           description: string
+          documents?: string[]
+          energy_rating?: string | null
           features?: string[]
           gallery_keys?: string[]
           garage?: number | null
+          google_maps_url?: string | null
           id?: string
-          image_key: string
+          image_key?: string
+          is_archived?: boolean
+          is_draft?: boolean
           is_featured?: boolean
+          is_hidden?: boolean
+          is_published?: boolean
+          latitude?: number | null
+          lease_price?: string | null
+          longitude?: number | null
+          lot_size?: string | null
           mls?: string | null
+          nearby_hospitals?: string[]
+          nearby_restaurants?: string[]
+          nearby_schools?: string[]
+          nearby_shopping?: string[]
+          open_house_date?: string | null
+          open_house_time?: string | null
           price: string
+          seo_description?: string | null
+          seo_keywords?: string | null
+          seo_title?: string | null
           slug: string
           sort_order?: number
           sqft?: number | null
           state: string
           status: Database["public"]["Enums"]["property_status"]
+          stories?: number | null
           title: string
           type: string
+          video_url?: string | null
+          virtual_tour_url?: string | null
           year_built?: number | null
           zip: string
         }
@@ -108,21 +152,44 @@ export type Database = {
           created_at?: string
           date_label?: string | null
           description?: string
+          documents?: string[]
+          energy_rating?: string | null
           features?: string[]
           gallery_keys?: string[]
           garage?: number | null
+          google_maps_url?: string | null
           id?: string
           image_key?: string
+          is_archived?: boolean
+          is_draft?: boolean
           is_featured?: boolean
+          is_hidden?: boolean
+          is_published?: boolean
+          latitude?: number | null
+          lease_price?: string | null
+          longitude?: number | null
+          lot_size?: string | null
           mls?: string | null
+          nearby_hospitals?: string[]
+          nearby_restaurants?: string[]
+          nearby_schools?: string[]
+          nearby_shopping?: string[]
+          open_house_date?: string | null
+          open_house_time?: string | null
           price?: string
+          seo_description?: string | null
+          seo_keywords?: string | null
+          seo_title?: string | null
           slug?: string
           sort_order?: number
           sqft?: number | null
           state?: string
           status?: Database["public"]["Enums"]["property_status"]
+          stories?: number | null
           title?: string
           type?: string
+          video_url?: string | null
+          virtual_tour_url?: string | null
           year_built?: number | null
           zip?: string
         }
@@ -160,7 +227,7 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      property_status: "for-sale" | "for-lease" | "sold" | "leased"
+      property_status: "for-sale" | "for-lease" | "sold" | "leased" | "pending"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -169,7 +236,6 @@ export type Database = {
 }
 
 type DatabaseWithoutInternals = Omit<Database, "__InternalSupabase">
-
 type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "public">]
 
 export type Tables<
@@ -193,13 +259,13 @@ export type Tables<
     : never
   : DefaultSchemaTableNameOrOptions extends keyof (DefaultSchema["Tables"] &
         DefaultSchema["Views"])
-    ? (DefaultSchema["Tables"] &
-        DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends {
-        Row: infer R
-      }
-      ? R
-      : never
+  ? (DefaultSchema["Tables"] &
+      DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends {
+      Row: infer R
+    }
+    ? R
     : never
+  : never
 
 export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
@@ -219,12 +285,12 @@ export type TablesInsert<
     ? I
     : never
   : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
-    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
-        Insert: infer I
-      }
-      ? I
-      : never
+  ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+      Insert: infer I
+    }
+    ? I
     : never
+  : never
 
 export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
@@ -244,12 +310,12 @@ export type TablesUpdate<
     ? U
     : never
   : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
-    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
-        Update: infer U
-      }
-      ? U
-      : never
+  ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+      Update: infer U
+    }
+    ? U
     : never
+  : never
 
 export type Enums<
   DefaultSchemaEnumNameOrOptions extends
@@ -265,30 +331,13 @@ export type Enums<
 }
   ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
   : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
-    ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
-    : never
-
-export type CompositeTypes<
-  PublicCompositeTypeNameOrOptions extends
-    | keyof DefaultSchema["CompositeTypes"]
-    | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
-    schema: keyof DatabaseWithoutInternals
-  }
-    ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
-> = PublicCompositeTypeNameOrOptions extends {
-  schema: keyof DatabaseWithoutInternals
-}
-  ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
-  : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
-    ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
-    : never
+  ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
+  : never
 
 export const Constants = {
   public: {
     Enums: {
-      property_status: ["for-sale", "for-lease", "sold", "leased"],
+      property_status: ["for-sale", "for-lease", "sold", "leased", "pending"],
     },
   },
 } as const

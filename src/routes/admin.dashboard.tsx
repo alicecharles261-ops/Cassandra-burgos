@@ -1,24 +1,16 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { ProtectedRoute } from "@/components/admin/protected-route";
 import { AdminLayout, AdminTab } from "@/components/admin/admin-layout";
 import { OverviewCards, DashboardMetrics } from "@/components/admin/overview-cards";
 import { RecentActivity, ActivityItem } from "@/components/admin/recent-activity";
+import { PropertyTable, PropertyRow } from "@/components/admin/property-table";
+import { PropertyForm, PropertyFormData } from "@/components/admin/property-form";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import {
-  Building2,
-  MessageSquare,
-  RefreshCw,
-  Search,
-  SlidersHorizontal,
-  Mail,
-  Phone,
-  Calendar,
-  Tag,
-  ShieldCheck,
-  UserCheck,
-  Lock,
+  RefreshCw, Mail, Phone, Calendar, Tag,
+  ShieldCheck, UserCheck, Lock, Database, Terminal,
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -39,11 +31,10 @@ function AdminDashboardContent() {
   const [activeTab, setActiveTab] = useState<AdminTab>("dashboard");
   const [loading, setLoading] = useState(true);
 
-  // Raw data from Supabase
-  const [properties, setProperties] = useState<any[]>([]);
+  const [properties, setProperties] = useState<PropertyRow[]>([]);
   const [inquiries, setInquiries] = useState<any[]>([]);
+  const [searchTerm, setSearchTerm] = useState("");
 
-  // Calculated Metrics for the 8 overview cards
   const [metrics, setMetrics] = useState<DashboardMetrics>({
     totalListings: 0,
     activeListings: 0,
@@ -54,61 +45,40 @@ function AdminDashboardContent() {
     hiddenListings: 0,
     totalInquiries: 0,
   });
-
   const [activities, setActivities] = useState<ActivityItem[]>([]);
-  const [searchTerm, setSearchTerm] = useState("");
 
-  const fetchData = async () => {
+  // Property form state
+  const [formOpen, setFormOpen] = useState(false);
+  const [editProperty, setEditProperty] = useState<Partial<PropertyFormData> | undefined>(undefined);
+
+  const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      // Fetch properties
-      const { data: propsData, error: propsErr } = await supabase
-        .from("properties")
-        .select("*")
-        .order("created_at", { ascending: false });
+      const [propsRes, inqRes] = await Promise.all([
+        supabase.from("properties").select("*").order("created_at", { ascending: false }),
+        supabase.from("inquiries").select("*").order("created_at", { ascending: false }),
+      ]);
 
-      if (propsErr) console.error("Error fetching properties:", propsErr);
-
-      // Fetch inquiries
-      const { data: inqData, error: inqErr } = await supabase
-        .from("inquiries")
-        .select("*")
-        .order("created_at", { ascending: false });
-
-      if (inqErr) console.error("Error fetching inquiries:", inqErr);
-
-      const loadedProps = propsData || [];
-      const loadedInqs = inqData || [];
+      const loadedProps: PropertyRow[] = propsRes.data || [];
+      const loadedInqs = inqRes.data || [];
 
       setProperties(loadedProps);
       setInquiries(loadedInqs);
 
-      // Compute overview card counts
-      const total = loadedProps.length;
-      const active = loadedProps.filter(
-        (p) => p.status === "for-sale" || p.status === "for-lease"
-      ).length;
-      const sold = loadedProps.filter((p) => p.status === "sold").length;
-      const leased = loadedProps.filter((p) => p.status === "leased").length;
-      const featured = loadedProps.filter((p) => p.is_featured === true).length;
-      
-      // Draft & Hidden calculation (handling status/flag representations)
-      const draft = loadedProps.filter((p: any) => p.status === "draft" || p.is_draft === true).length;
-      const hidden = loadedProps.filter((p: any) => p.is_hidden === true || p.status === "hidden").length;
-
+      // Metrics
       setMetrics({
-        totalListings: total,
-        activeListings: active,
-        soldListings: sold,
-        leasedListings: leased,
-        draftListings: draft,
-        featuredListings: featured,
-        hiddenListings: hidden,
+        totalListings: loadedProps.length,
+        activeListings: loadedProps.filter((p) => (p.status === "for-sale" || p.status === "for-lease") && !p.is_draft && !p.is_hidden && !p.is_archived).length,
+        soldListings: loadedProps.filter((p) => p.status === "sold").length,
+        leasedListings: loadedProps.filter((p) => p.status === "leased").length,
+        draftListings: loadedProps.filter((p) => p.is_draft).length,
+        featuredListings: loadedProps.filter((p) => p.is_featured).length,
+        hiddenListings: loadedProps.filter((p) => p.is_hidden).length,
         totalInquiries: loadedInqs.length,
       });
 
-      // Build Recent Activity items
-      const propActivities: ActivityItem[] = loadedProps.slice(0, 5).map((p) => ({
+      // Activity feed
+      const propActs: ActivityItem[] = loadedProps.slice(0, 5).map((p) => ({
         id: `prop-${p.id}`,
         type: "property",
         title: p.title,
@@ -116,58 +86,176 @@ function AdminDashboardContent() {
         status: p.status,
         timestamp: p.created_at,
       }));
-
-      const inqActivities: ActivityItem[] = loadedInqs.slice(0, 5).map((i) => ({
+      const inqActs: ActivityItem[] = loadedInqs.slice(0, 5).map((i) => ({
         id: `inq-${i.id}`,
         type: "inquiry",
         title: `Inquiry from ${i.name}`,
-        subtitle: i.property_slug ? `Regarding: ${i.property_slug}` : i.message.substring(0, 45) + "...",
+        subtitle: i.property_slug ? `Re: ${i.property_slug}` : (i.message || "").substring(0, 45) + "…",
         timestamp: i.created_at,
       }));
-
-      // Combine and sort by timestamp
-      const combined = [...propActivities, ...inqActivities].sort(
-        (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+      setActivities(
+        [...propActs, ...inqActs]
+          .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+          .slice(0, 8)
       );
-
-      setActivities(combined.slice(0, 8));
     } catch (err) {
-      console.error("Failed to load dashboard data:", err);
+      console.error("Dashboard fetch error:", err);
     } finally {
       setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    fetchData();
   }, []);
 
-  const filteredProperties = properties.filter((p) =>
-    p.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    p.city.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    p.address.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  useEffect(() => { fetchData(); }, [fetchData]);
 
-  const filteredInquiries = inquiries.filter((i) =>
-    i.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    i.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    i.message.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  /* ── Property Form Handlers ── */
+  const handleCreate = () => {
+    setEditProperty(undefined);
+    setFormOpen(true);
+  };
+
+  const handleEdit = (p: PropertyRow) => {
+    // Map PropertyRow → PropertyFormData shape
+    setEditProperty({
+      id: p.id,
+      slug: p.slug,
+      title: p.title,
+      type: p.type,
+      status: p.status,
+      is_draft: p.is_draft ?? false,
+      is_hidden: p.is_hidden ?? false,
+      is_published: p.is_published ?? true,
+      is_archived: p.is_archived ?? false,
+      is_featured: p.is_featured ?? false,
+      price: p.price ?? "",
+      lease_price: p.lease_price ?? "",
+      mls: p.mls ?? "",
+      date_label: p.date_label ?? "",
+      sort_order: String(p.sort_order ?? 0),
+      address: p.address ?? "",
+      city: p.city ?? "",
+      state: p.state ?? "",
+      zip: p.zip ?? "",
+      latitude: p.latitude != null ? String(p.latitude) : "",
+      longitude: p.longitude != null ? String(p.longitude) : "",
+      google_maps_url: p.google_maps_url ?? "",
+      beds: p.beds != null ? String(p.beds) : "",
+      baths: p.baths != null ? String(p.baths) : "",
+      garage: p.garage != null ? String(p.garage) : "",
+      stories: p.stories != null ? String(p.stories) : "",
+      sqft: p.sqft != null ? String(p.sqft) : "",
+      lot_size: p.lot_size ?? "",
+      year_built: p.year_built != null ? String(p.year_built) : "",
+      open_house_date: p.open_house_date ?? "",
+      open_house_time: p.open_house_time ?? "",
+      video_url: p.video_url ?? "",
+      virtual_tour_url: p.virtual_tour_url ?? "",
+      description: p.description ?? "",
+      features: p.features ?? [],
+      amenities: p.amenities ?? [],
+      nearby_schools: p.nearby_schools ?? [],
+      nearby_shopping: p.nearby_shopping ?? [],
+      nearby_restaurants: p.nearby_restaurants ?? [],
+      nearby_hospitals: p.nearby_hospitals ?? [],
+      energy_rating: p.energy_rating ?? "",
+      image_key: p.image_key ?? "",
+      gallery_keys: p.gallery_keys ?? [],
+      documents: p.documents ?? [],
+      seo_title: p.seo_title ?? "",
+      seo_description: p.seo_description ?? "",
+      seo_keywords: p.seo_keywords ?? "",
+    });
+    setFormOpen(true);
+  };
+
+  const handleSaved = () => {
+    setFormOpen(false);
+    setEditProperty(undefined);
+    fetchData();
+  };
+
+  const filteredInquiries = inquiries.filter((i) => {
+    const q = searchTerm.toLowerCase();
+    return (
+      !q ||
+      i.name?.toLowerCase().includes(q) ||
+      i.email?.toLowerCase().includes(q) ||
+      i.message?.toLowerCase().includes(q)
+    );
+  });
+
+  const MIGRATION_SQL = `-- Run this in Supabase SQL Editor:
+-- https://app.supabase.com/project/khnwdfwvhmogtevpeclv/sql
+
+ALTER TYPE public.property_status ADD VALUE IF NOT EXISTS 'pending';
+
+ALTER TABLE public.properties
+  ADD COLUMN IF NOT EXISTS lease_price text,
+  ADD COLUMN IF NOT EXISTS latitude numeric(10,7),
+  ADD COLUMN IF NOT EXISTS longitude numeric(10,7),
+  ADD COLUMN IF NOT EXISTS stories integer,
+  ADD COLUMN IF NOT EXISTS lot_size text,
+  ADD COLUMN IF NOT EXISTS open_house_date text,
+  ADD COLUMN IF NOT EXISTS open_house_time text,
+  ADD COLUMN IF NOT EXISTS video_url text,
+  ADD COLUMN IF NOT EXISTS virtual_tour_url text,
+  ADD COLUMN IF NOT EXISTS google_maps_url text,
+  ADD COLUMN IF NOT EXISTS nearby_schools text[] NOT NULL DEFAULT '{}',
+  ADD COLUMN IF NOT EXISTS nearby_shopping text[] NOT NULL DEFAULT '{}',
+  ADD COLUMN IF NOT EXISTS nearby_restaurants text[] NOT NULL DEFAULT '{}',
+  ADD COLUMN IF NOT EXISTS nearby_hospitals text[] NOT NULL DEFAULT '{}',
+  ADD COLUMN IF NOT EXISTS energy_rating text,
+  ADD COLUMN IF NOT EXISTS documents text[] NOT NULL DEFAULT '{}',
+  ADD COLUMN IF NOT EXISTS seo_title text,
+  ADD COLUMN IF NOT EXISTS seo_description text,
+  ADD COLUMN IF NOT EXISTS seo_keywords text,
+  ADD COLUMN IF NOT EXISTS is_hidden boolean NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS is_published boolean NOT NULL DEFAULT true,
+  ADD COLUMN IF NOT EXISTS is_draft boolean NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS is_archived boolean NOT NULL DEFAULT false;
+
+GRANT INSERT, UPDATE, DELETE ON public.properties TO authenticated;
+
+CREATE POLICY IF NOT EXISTS "Admin can insert properties" ON public.properties
+  FOR INSERT TO authenticated WITH CHECK (true);
+CREATE POLICY IF NOT EXISTS "Admin can update properties" ON public.properties
+  FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY IF NOT EXISTS "Admin can delete properties" ON public.properties
+  FOR DELETE TO authenticated USING (true);
+
+INSERT INTO storage.buckets (id, name, public)
+  VALUES ('property-images', 'property-images', true)
+  ON CONFLICT (id) DO NOTHING;
+
+CREATE POLICY "Public can view property images" ON storage.objects
+  FOR SELECT USING (bucket_id = 'property-images');
+CREATE POLICY "Admin can upload property images" ON storage.objects
+  FOR INSERT TO authenticated WITH CHECK (bucket_id = 'property-images');
+CREATE POLICY "Admin can update property images" ON storage.objects
+  FOR UPDATE TO authenticated USING (bucket_id = 'property-images');
+CREATE POLICY "Admin can delete property images" ON storage.objects
+  FOR DELETE TO authenticated USING (bucket_id = 'property-images');`;
 
   return (
-    <AdminLayout activeTab={activeTab} onTabChange={setActiveTab}>
-      {/* Tab Header Banner */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
-        <div>
-          <h2 className="text-2xl md:text-3xl font-serif font-bold text-white capitalize flex items-center gap-3">
-            {activeTab} Management
-          </h2>
-          <p className="text-xs text-zinc-400 mt-1">
-            Overview and real-time operational statistics for Cassandra Burgos Luxury Real Estate.
-          </p>
-        </div>
+    <>
+      {/* Property Form (slide-over) */}
+      <PropertyForm
+        open={formOpen}
+        initial={editProperty}
+        onClose={() => { setFormOpen(false); setEditProperty(undefined); }}
+        onSaved={handleSaved}
+      />
 
-        <div className="flex items-center gap-3">
+      <AdminLayout activeTab={activeTab} onTabChange={setActiveTab}>
+        {/* Tab Header */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+          <div>
+            <h2 className="text-2xl md:text-3xl font-serif font-bold text-white capitalize">
+              {activeTab === "dashboard" ? "Dashboard" : `${activeTab.charAt(0).toUpperCase() + activeTab.slice(1)} Management`}
+            </h2>
+            <p className="text-xs text-zinc-400 mt-1">
+              Cassandra Burgos Luxury Real Estate — Admin Portal
+            </p>
+          </div>
           <button
             onClick={fetchData}
             disabled={loading}
@@ -177,295 +265,256 @@ function AdminDashboardContent() {
             Refresh Data
           </button>
         </div>
-      </div>
 
-      {/* DASHBOARD TAB CONTENT */}
-      {activeTab === "dashboard" && (
-        <div className="space-y-8">
-          {/* 8 Overview Metric Cards */}
-          <OverviewCards metrics={metrics} loading={loading} />
-
-          {/* Activity & Quick Overview Section */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            <div className="lg:col-span-2">
-              <RecentActivity activities={activities} loading={loading} />
-            </div>
-
-            {/* Quick Status Breakdown Side Panel */}
-            <div className="rounded-xl border border-white/10 bg-[#141414] p-6 shadow-xl space-y-4">
-              <h3 className="text-base font-serif font-semibold text-white flex items-center justify-between">
-                <span>System Status</span>
-                <span className="text-[10px] font-sans font-bold text-emerald-400 uppercase tracking-wider px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20">
-                  Online
-                </span>
-              </h3>
-
-              <div className="space-y-3 pt-2 text-xs">
-                <div className="flex justify-between items-center py-2 border-b border-white/5">
-                  <span className="text-zinc-300">Database Connection</span>
-                  <span className="text-emerald-400 font-medium">Active (Supabase)</span>
-                </div>
-                <div className="flex justify-between items-center py-2 border-b border-white/5">
-                  <span className="text-zinc-300">Auth Session</span>
-                  <span className="text-zinc-200 font-medium">Secured JWT</span>
-                </div>
-                <div className="flex justify-between items-center py-2 border-b border-white/5">
-                  <span className="text-zinc-300">Admin Account</span>
-                  <span className="text-[#d4af37] font-medium truncate max-w-[150px]">{user?.email}</span>
-                </div>
-                <div className="flex justify-between items-center py-2">
-                  <span className="text-zinc-300">Public Site Sync</span>
-                  <span className="text-emerald-400 font-medium">Synced</span>
-                </div>
+        {/* ── DASHBOARD TAB ── */}
+        {activeTab === "dashboard" && (
+          <div className="space-y-8">
+            <OverviewCards metrics={metrics} loading={loading} />
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+              <div className="lg:col-span-2">
+                <RecentActivity activities={activities} loading={loading} />
               </div>
-
-              <div className="pt-4 border-t border-white/10">
-                <div className="rounded-lg bg-[#d4af37]/10 border border-[#d4af37]/20 p-3 text-[11px] text-[#d4af37] leading-relaxed">
-                  Property CRUD is restricted in overview mode. Contact system administrator for write privileges.
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* PROPERTIES TAB CONTENT */}
-      {activeTab === "properties" && (
-        <div className="space-y-6">
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div className="relative w-full sm:w-80">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
-              <input
-                type="text"
-                placeholder="Search properties by title or city..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full rounded-lg border border-white/15 bg-[#141414] pl-9 pr-4 py-2 text-xs text-white placeholder-zinc-500 focus:border-[#d4af37] focus:outline-none"
-              />
-            </div>
-            <p className="text-xs text-zinc-300">
-              Showing {filteredProperties.length} of {properties.length} properties
-            </p>
-          </div>
-
-          <div className="rounded-xl border border-white/10 bg-[#141414] overflow-hidden shadow-xl">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs text-zinc-300">
-                <thead className="bg-white/[0.05] text-[11px] uppercase tracking-wider text-zinc-300 border-b border-white/10">
-                  <tr>
-                    <th className="py-3.5 px-4 font-semibold">Property</th>
-                    <th className="py-3.5 px-4 font-semibold">Location</th>
-                    <th className="py-3.5 px-4 font-semibold">Price</th>
-                    <th className="py-3.5 px-4 font-semibold">Beds/Baths</th>
-                    <th className="py-3.5 px-4 font-semibold">Status</th>
-                    <th className="py-3.5 px-4 font-semibold">Featured</th>
-                    <th className="py-3.5 px-4 font-semibold">Date Added</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-white/5">
-                  {filteredProperties.length === 0 ? (
-                    <tr>
-                      <td colSpan={7} className="py-8 text-center text-zinc-500">
-                        No property listings found.
-                      </td>
-                    </tr>
-                  ) : (
-                    filteredProperties.map((p) => (
-                      <tr key={p.id} className="hover:bg-white/[0.02] transition-colors">
-                        <td className="py-3.5 px-4 font-medium text-white">
-                          <div className="flex items-center gap-3">
-                            <Building2 className="h-4 w-4 text-[#d4af37] shrink-0" />
-                            <span className="truncate max-w-[200px]" title={p.title}>{p.title}</span>
-                          </div>
-                        </td>
-                        <td className="py-3.5 px-4 text-zinc-300">{p.city}, {p.state}</td>
-                        <td className="py-3.5 px-4 font-semibold text-[#d4af37]">{p.price}</td>
-                        <td className="py-3.5 px-4 text-zinc-300">{p.beds} beds • {p.baths} baths</td>
-                        <td className="py-3.5 px-4">
-                          <span className="inline-block px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider bg-white/10 text-zinc-200">
-                            {p.status}
-                          </span>
-                        </td>
-                        <td className="py-3.5 px-4">
-                          {p.is_featured ? (
-                            <span className="text-amber-400 font-bold">Yes</span>
-                          ) : (
-                            <span className="text-zinc-400">No</span>
-                          )}
-                        </td>
-                        <td className="py-3.5 px-4 text-zinc-400">
-                          {p.created_at ? format(new Date(p.created_at), "MMM d, yyyy") : "N/A"}
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* INQUIRIES TAB CONTENT */}
-      {activeTab === "inquiries" && (
-        <div className="space-y-6">
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div className="relative w-full sm:w-80">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
-              <input
-                type="text"
-                placeholder="Search inquiries by name or message..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full rounded-lg border border-white/15 bg-[#141414] pl-9 pr-4 py-2 text-xs text-white placeholder-zinc-500 focus:border-[#d4af37] focus:outline-none"
-              />
-            </div>
-            <p className="text-xs text-zinc-300">
-              Received {filteredInquiries.length} total contact messages
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {filteredInquiries.length === 0 ? (
-              <div className="col-span-full py-12 text-center text-zinc-400 bg-[#141414] rounded-xl border border-white/10">
-                No contact inquiries match your search.
-              </div>
-            ) : (
-              filteredInquiries.map((inq) => (
-                <div
-                  key={inq.id}
-                  className="rounded-xl border border-white/10 bg-[#141414] p-5 shadow-lg space-y-3 hover:border-[#d4af37]/40 transition-colors"
-                >
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <h4 className="text-sm font-semibold text-white">{inq.name}</h4>
-                      <div className="flex items-center gap-3 text-xs text-zinc-300 mt-1">
-                        <span className="flex items-center gap-1">
-                          <Mail className="h-3 w-3 text-[#d4af37]" />
-                          {inq.email}
-                        </span>
-                        {inq.phone && (
-                          <span className="flex items-center gap-1">
-                            <Phone className="h-3 w-3 text-[#d4af37]" />
-                            {inq.phone}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    <span className="text-[10px] text-zinc-400 flex items-center gap-1">
-                      <Calendar className="h-3 w-3" />
-                      {inq.created_at ? format(new Date(inq.created_at), "MMM d, h:mm a") : "Recent"}
-                    </span>
+              <div className="rounded-xl border border-white/10 bg-[#141414] p-6 shadow-xl space-y-4">
+                <h3 className="text-base font-serif font-semibold text-white flex items-center justify-between">
+                  <span>System Status</span>
+                  <span className="text-[10px] font-sans font-bold text-emerald-400 uppercase tracking-wider px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20">
+                    Online
+                  </span>
+                </h3>
+                <div className="space-y-3 pt-2 text-xs">
+                  <div className="flex justify-between items-center py-2 border-b border-white/5">
+                    <span className="text-zinc-300">Database</span>
+                    <span className="text-emerald-400 font-medium">Supabase Connected</span>
                   </div>
+                  <div className="flex justify-between items-center py-2 border-b border-white/5">
+                    <span className="text-zinc-300">Auth Session</span>
+                    <span className="text-zinc-200 font-medium">Secured JWT</span>
+                  </div>
+                  <div className="flex justify-between items-center py-2 border-b border-white/5">
+                    <span className="text-zinc-300">Admin Account</span>
+                    <span className="text-[#d4af37] font-medium truncate max-w-[150px]">{user?.email}</span>
+                  </div>
+                  <div className="flex justify-between items-center py-2">
+                    <span className="text-zinc-300">CMS Status</span>
+                    <span className="text-emerald-400 font-medium">Active</span>
+                  </div>
+                </div>
+                <div className="pt-4 border-t border-white/10 space-y-2">
+                  <button
+                    onClick={() => setActiveTab("properties")}
+                    className="w-full rounded-lg bg-[#d4af37]/10 border border-[#d4af37]/20 px-3 py-2 text-xs text-[#d4af37] font-medium hover:bg-[#d4af37]/20 transition-colors"
+                  >
+                    Manage Properties →
+                  </button>
+                  <button
+                    onClick={() => setActiveTab("settings")}
+                    className="w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-xs text-zinc-300 font-medium hover:bg-white/10 transition-colors"
+                  >
+                    View Migration SQL →
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
-                  {inq.property_slug && (
-                    <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-[#d4af37]/10 text-[#d4af37] text-[11px] font-medium border border-[#d4af37]/20">
-                      <Tag className="h-3 w-3" />
-                      <span>Property: {inq.property_slug}</span>
+        {/* ── PROPERTIES TAB ── */}
+        {activeTab === "properties" && (
+          <PropertyTable
+            properties={properties}
+            loading={loading}
+            onEdit={handleEdit}
+            onCreate={handleCreate}
+            onRefresh={fetchData}
+          />
+        )}
+
+        {/* ── INQUIRIES TAB ── */}
+        {activeTab === "inquiries" && (
+          <div className="space-y-6">
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="relative w-full sm:w-80">
+                <input
+                  type="text"
+                  placeholder="Search inquiries…"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full rounded-lg border border-white/15 bg-[#141414] pl-4 pr-4 py-2 text-xs text-white placeholder-zinc-500 focus:border-[#d4af37]/60 focus:outline-none"
+                />
+              </div>
+              <p className="text-xs text-zinc-300">{filteredInquiries.length} messages</p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {filteredInquiries.length === 0 ? (
+                <div className="col-span-full py-12 text-center text-zinc-400 bg-[#141414] rounded-xl border border-white/10">
+                  No inquiries found.
+                </div>
+              ) : (
+                filteredInquiries.map((inq) => (
+                  <div key={inq.id} className="rounded-xl border border-white/10 bg-[#141414] p-5 shadow-lg space-y-3 hover:border-[#d4af37]/40 transition-colors">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <h4 className="text-sm font-semibold text-white">{inq.name}</h4>
+                        <div className="flex flex-wrap items-center gap-3 text-xs text-zinc-300 mt-1">
+                          <span className="flex items-center gap-1">
+                            <Mail className="h-3 w-3 text-[#d4af37]" />
+                            <a href={`mailto:${inq.email}`} className="hover:text-white transition-colors">{inq.email}</a>
+                          </span>
+                          {inq.phone && (
+                            <span className="flex items-center gap-1">
+                              <Phone className="h-3 w-3 text-[#d4af37]" />
+                              {inq.phone}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <span className="text-[10px] text-zinc-400 flex items-center gap-1 shrink-0">
+                        <Calendar className="h-3 w-3" />
+                        {inq.created_at ? format(new Date(inq.created_at), "MMM d, h:mm a") : "Recent"}
+                      </span>
                     </div>
-                  )}
+                    {inq.property_slug && (
+                      <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-[#d4af37]/10 text-[#d4af37] text-[11px] font-medium border border-[#d4af37]/20">
+                        <Tag className="h-3 w-3" />
+                        <span>Re: {inq.property_slug}</span>
+                      </div>
+                    )}
+                    <p className="text-xs text-zinc-300 bg-black/40 p-3 rounded-lg border border-white/5 leading-relaxed">
+                      "{inq.message}"
+                    </p>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        )}
 
-                  <p className="text-xs text-zinc-300 bg-black/40 p-3 rounded-lg border border-white/5 leading-relaxed">
-                    "{inq.message}"
+        {/* ── SETTINGS TAB ── */}
+        {activeTab === "settings" && (
+          <div className="space-y-6 max-w-4xl">
+            {/* Migration Notice */}
+            <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-5 space-y-3">
+              <div className="flex items-start gap-3">
+                <Database className="h-5 w-5 text-amber-400 shrink-0 mt-0.5" />
+                <div>
+                  <h3 className="text-sm font-semibold text-amber-300">Database Migration Required</h3>
+                  <p className="text-xs text-amber-200/70 mt-1">
+                    To enable all CMS features (new fields, image storage, write access), apply the migration below in the{" "}
+                    <a
+                      href="https://app.supabase.com/project/khnwdfwvhmogtevpeclv/sql"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="underline hover:text-amber-200"
+                    >
+                      Supabase SQL Editor
+                    </a>
+                    . This is a one-time setup.
                   </p>
                 </div>
-              ))
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* SETTINGS TAB CONTENT */}
-      {activeTab === "settings" && (
-        <div className="max-w-3xl space-y-6">
-          <div className="rounded-xl border border-white/10 bg-[#141414] p-6 shadow-xl space-y-6">
-            <h3 className="text-lg font-serif font-semibold text-white flex items-center gap-2 border-b border-white/10 pb-3">
-              <Lock className="h-5 w-5 text-[#d4af37]" />
-              Security & Environment Settings
-            </h3>
-
-            <div className="space-y-4 text-xs">
-              <div className="p-4 rounded-lg bg-black/40 border border-white/5 flex items-center justify-between">
-                <div>
-                  <p className="font-semibold text-white">Supabase Project Endpoint</p>
-                  <p className="text-zinc-400 mt-0.5">https://alepefdfmcqngjzqyajc.supabase.co</p>
-                </div>
-                <span className="px-2.5 py-1 rounded bg-emerald-500/10 text-emerald-400 font-bold border border-emerald-500/20">
-                  Connected
-                </span>
-              </div>
-
-              <div className="p-4 rounded-lg bg-black/40 border border-white/5 flex items-center justify-between">
-                <div>
-                  <p className="font-semibold text-white">Session Persistence Strategy</p>
-                  <p className="text-zinc-400 mt-0.5">Auto refresh JWT tokens enabled in LocalStorage</p>
-                </div>
-                <span className="px-2.5 py-1 rounded bg-[#d4af37]/10 text-[#d4af37] font-bold border border-[#d4af37]/20">
-                  Active
-                </span>
-              </div>
-
-              <div className="p-4 rounded-lg bg-black/40 border border-white/5 flex items-center justify-between">
-                <div>
-                  <p className="font-semibold text-white">Role Base Access Control (RBAC)</p>
-                  <p className="text-zinc-400 mt-0.5">Protected Admin Router Guards Active</p>
-                </div>
-                <span className="px-2.5 py-1 rounded bg-emerald-500/10 text-emerald-400 font-bold border border-emerald-500/20">
-                  Enforced
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* PROFILE TAB CONTENT */}
-      {activeTab === "profile" && (
-        <div className="max-w-2xl space-y-6">
-          <div className="rounded-xl border border-white/10 bg-[#141414] p-6 shadow-xl space-y-6">
-            <div className="flex items-center gap-4 border-b border-white/10 pb-6">
-              <div className="h-16 w-16 rounded-full bg-[#d4af37]/20 text-[#d4af37] border-2 border-[#d4af37] flex items-center justify-center font-bold text-2xl uppercase shadow-lg shadow-[#d4af37]/10">
-                {user?.email?.[0] || "A"}
-              </div>
-              <div>
-                <h3 className="text-xl font-serif font-bold text-white">Administrator Account</h3>
-                <p className="text-xs text-zinc-400">{user?.email}</p>
-                <div className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 text-[10px] font-semibold uppercase tracking-wider border border-emerald-500/20">
-                  <UserCheck className="h-3 w-3" />
-                  Authenticated Admin
-                </div>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-              <div className="p-4 rounded-lg bg-black/40 border border-white/5">
-                <span className="text-zinc-400">User ID</span>
-                <p className="font-mono text-zinc-200 font-medium mt-1 truncate">{user?.id}</p>
+            {/* Migration SQL */}
+            <div className="rounded-xl border border-white/10 bg-[#141414] overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 bg-white/[0.03]">
+                <div className="flex items-center gap-2">
+                  <Terminal className="h-4 w-4 text-[#d4af37]" />
+                  <span className="text-xs font-semibold text-zinc-200">
+                    supabase/migrations/20260730000000_cms_extension.sql
+                  </span>
+                </div>
+                <button
+                  onClick={() => navigator.clipboard.writeText(MIGRATION_SQL)}
+                  className="text-[10px] text-zinc-400 hover:text-white transition-colors border border-white/15 rounded px-2 py-1"
+                >
+                  Copy SQL
+                </button>
               </div>
+              <pre className="overflow-x-auto p-4 text-[10px] text-zinc-300 leading-relaxed font-mono max-h-96 overflow-y-auto">
+                {MIGRATION_SQL}
+              </pre>
+            </div>
 
-              <div className="p-4 rounded-lg bg-black/40 border border-white/5">
-                <span className="text-zinc-400">Last Sign-In</span>
-                <p className="text-zinc-200 font-medium mt-1">
-                  {user?.last_sign_in_at ? format(new Date(user.last_sign_in_at), "PPpp") : "Current session"}
-                </p>
-              </div>
-
-              <div className="p-4 rounded-lg bg-black/40 border border-white/5">
-                <span className="text-zinc-400">Email Status</span>
-                <p className="text-emerald-400 font-medium mt-1 flex items-center gap-1">
-                  <ShieldCheck className="h-3.5 w-3.5" />
-                  Verified Administrator
-                </p>
-              </div>
-
-              <div className="p-4 rounded-lg bg-black/40 border border-white/5">
-                <span className="text-zinc-400">Access Scope</span>
-                <p className="text-[#d4af37] font-medium mt-1">Full Luxury Portal Admin</p>
+            {/* Security info */}
+            <div className="rounded-xl border border-white/10 bg-[#141414] p-6 space-y-4">
+              <h3 className="text-base font-serif font-semibold text-white flex items-center gap-2">
+                <Lock className="h-4 w-4 text-[#d4af37]" />
+                Security & Configuration
+              </h3>
+              <div className="space-y-3 text-xs">
+                <InfoRow label="Supabase URL" value="khnwdfwvhmogtevpeclv.supabase.co" status="connected" />
+                <InfoRow label="Auth Strategy" value="JWT (auto-refresh enabled)" status="active" />
+                <InfoRow label="RLS Policies" value="Enabled on all tables" status="enforced" />
+                <InfoRow label="Storage Bucket" value="property-images (public)" status="pending" />
               </div>
             </div>
           </div>
-        </div>
-      )}
-    </AdminLayout>
+        )}
+
+        {/* ── PROFILE TAB ── */}
+        {activeTab === "profile" && (
+          <div className="max-w-2xl space-y-6">
+            <div className="rounded-xl border border-white/10 bg-[#141414] p-6 shadow-xl space-y-6">
+              <div className="flex items-center gap-4 border-b border-white/10 pb-6">
+                <div className="h-16 w-16 rounded-full bg-[#d4af37]/20 text-[#d4af37] border-2 border-[#d4af37] flex items-center justify-center font-bold text-2xl uppercase shadow-lg shadow-[#d4af37]/10">
+                  {user?.email?.[0]?.toUpperCase() || "A"}
+                </div>
+                <div>
+                  <h3 className="text-xl font-serif font-bold text-white">Administrator Account</h3>
+                  <p className="text-xs text-zinc-400">{user?.email}</p>
+                  <div className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 text-[10px] font-semibold uppercase tracking-wider border border-emerald-500/20">
+                    <UserCheck className="h-3 w-3" />
+                    Authenticated Admin
+                  </div>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                <div className="p-4 rounded-lg bg-black/40 border border-white/5">
+                  <span className="text-zinc-400">User ID</span>
+                  <p className="font-mono text-zinc-200 font-medium mt-1 truncate">{user?.id}</p>
+                </div>
+                <div className="p-4 rounded-lg bg-black/40 border border-white/5">
+                  <span className="text-zinc-400">Last Sign-In</span>
+                  <p className="text-zinc-200 font-medium mt-1">
+                    {user?.last_sign_in_at ? format(new Date(user.last_sign_in_at), "PPpp") : "Current session"}
+                  </p>
+                </div>
+                <div className="p-4 rounded-lg bg-black/40 border border-white/5">
+                  <span className="text-zinc-400">Email Status</span>
+                  <p className="text-emerald-400 font-medium mt-1 flex items-center gap-1">
+                    <ShieldCheck className="h-3.5 w-3.5" />
+                    Verified Administrator
+                  </p>
+                </div>
+                <div className="p-4 rounded-lg bg-black/40 border border-white/5">
+                  <span className="text-zinc-400">Access Scope</span>
+                  <p className="text-[#d4af37] font-medium mt-1">Full CMS Admin</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </AdminLayout>
+    </>
+  );
+}
+
+function InfoRow({ label, value, status }: { label: string; value: string; status: "connected" | "active" | "enforced" | "pending" }) {
+  const colors = {
+    connected: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20",
+    active: "text-[#d4af37] bg-[#d4af37]/10 border-[#d4af37]/20",
+    enforced: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20",
+    pending: "text-amber-400 bg-amber-500/10 border-amber-500/20",
+  };
+  return (
+    <div className="p-3.5 rounded-lg bg-black/40 border border-white/5 flex items-center justify-between">
+      <div>
+        <p className="font-semibold text-white">{label}</p>
+        <p className="text-zinc-400 mt-0.5">{value}</p>
+      </div>
+      <span className={`px-2.5 py-1 rounded border font-bold text-[10px] uppercase tracking-wider ${colors[status]}`}>
+        {status}
+      </span>
+    </div>
   );
 }
