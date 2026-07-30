@@ -134,7 +134,7 @@ function AdminLoginComponent() {
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="admin@cassandraburgos.com"
                   required
-                  className="w-full rounded-lg border border-white/10 bg-black/40 pl-10 pr-4 py-2.5 text-sm text-foreground placeholder-zinc-600 focus:border-[#d4af37] focus:outline-none focus:ring-1 focus:ring-[#d4af37] transition-colors"
+                  className="w-full rounded-lg border border-white/10 bg-black/40 pl-10 pr-4 py-2.5 text-sm text-white caret-white placeholder-zinc-500 focus:border-[#d4af37] focus:outline-none focus:ring-1 focus:ring-[#d4af37] transition-colors admin-input"
                 />
               </div>
             </div>
@@ -151,7 +151,7 @@ function AdminLoginComponent() {
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••••••"
                   required
-                  className="w-full rounded-lg border border-white/10 bg-black/40 pl-10 pr-10 py-2.5 text-sm text-foreground placeholder-zinc-600 focus:border-[#d4af37] focus:outline-none focus:ring-1 focus:ring-[#d4af37] transition-colors"
+                  className="w-full rounded-lg border border-white/10 bg-black/40 pl-10 pr-10 py-2.5 text-sm text-white caret-white placeholder-zinc-500 focus:border-[#d4af37] focus:outline-none focus:ring-1 focus:ring-[#d4af37] transition-colors admin-input"
                 />
                 <button
                   type="button"
@@ -257,7 +257,7 @@ function AdminLoginComponent() {
                   onChange={(e) => setResetEmail(e.target.value)}
                   placeholder="admin@cassandraburgos.com"
                   required
-                  className="w-full rounded-lg border border-white/10 bg-black/40 px-3.5 py-2 text-sm text-foreground focus:border-[#d4af37] focus:outline-none"
+                  className="w-full rounded-lg border border-white/10 bg-black/40 px-3.5 py-2 text-sm text-white caret-white placeholder-zinc-500 focus:border-[#d4af37] focus:outline-none admin-input"
                 />
               </div>
 

@@ -217,6 +217,19 @@
   }
 }
 
+/* Admin login: force white text + dark fill on autofilled inputs
+   Uses the inset box-shadow trick to override the browser's autofill background
+   in both light and dark autofill modes (Chrome, Safari, Firefox). */
+.admin-input:-webkit-autofill,
+.admin-input:-webkit-autofill:hover,
+.admin-input:-webkit-autofill:focus,
+.admin-input:-webkit-autofill:active {
+  -webkit-text-fill-color: #ffffff !important;
+  -webkit-box-shadow: 0 0 0px 1000px #0d0d0d inset !important;
+  box-shadow: 0 0 0px 1000px #0d0d0d inset !important;
+  caret-color: #ffffff !important;
+}
+
 @keyframes fadeUp {
   from { opacity: 0; transform: translateY(24px); }
   to { opacity: 1; transform: translateY(0); }
