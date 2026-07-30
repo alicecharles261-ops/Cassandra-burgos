@@ -24,6 +24,12 @@ export function SiteNav() {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
+  const text = scrolled ? "text-foreground" : "text-white";
+  const textMuted = scrolled ? "text-muted-foreground" : "text-white/70";
+  const textNav = scrolled ? "text-foreground/80 hover:text-foreground" : "text-white/90 hover:text-white";
+  const textIcon = scrolled ? "text-foreground/70 hover:text-gold-dark" : "text-white/80 hover:text-white";
+  const borderLogo = scrolled ? "border-foreground/80" : "border-white/80";
+
   return (
     <header
       className={
@@ -35,12 +41,12 @@ export function SiteNav() {
     >
       <div className="container-luxury flex h-20 items-center justify-between">
         <Link to="/" className="flex items-center gap-3 group" aria-label="Cassandra Burgos — home">
-          <span className="inline-flex h-11 w-11 items-center justify-center border border-foreground/80 font-serif text-lg tracking-tight text-foreground">
+          <span className={`inline-flex h-11 w-11 items-center justify-center border font-serif text-lg tracking-tight ${borderLogo} ${text}`}>
             CB
           </span>
           <div className="hidden sm:flex flex-col leading-tight">
-            <span className="font-serif text-lg text-foreground">Cassandra Burgos</span>
-            <span className="text-[0.62rem] uppercase tracking-[0.32em] text-muted-foreground">
+            <span className={`font-serif text-lg ${text}`}>Cassandra Burgos</span>
+            <span className={`text-[0.62rem] uppercase tracking-[0.32em] ${textMuted}`}>
               Real Estate
             </span>
           </div>
@@ -51,7 +57,7 @@ export function SiteNav() {
             <a
               key={l.href}
               href={l.href}
-              className="relative text-[0.78rem] uppercase tracking-[0.22em] text-foreground/80 hover:text-foreground transition-colors after:absolute after:inset-x-0 after:-bottom-1.5 after:h-px after:origin-left after:scale-x-0 after:bg-gold after:transition-transform hover:after:scale-x-100"
+              className={`relative text-[0.78rem] uppercase tracking-[0.22em] transition-colors after:absolute after:inset-x-0 after:-bottom-1.5 after:h-px after:origin-left after:scale-x-0 after:bg-gold after:transition-transform hover:after:scale-x-100 ${textNav}`}
             >
               {l.label}
             </a>
@@ -64,7 +70,7 @@ export function SiteNav() {
             target="_blank"
             rel="noreferrer"
             aria-label="Instagram"
-            className="hidden md:inline-flex h-10 w-10 items-center justify-center text-foreground/70 hover:text-gold-dark transition-colors"
+            className={`hidden md:inline-flex h-10 w-10 items-center justify-center transition-colors ${textIcon}`}
           >
             <Instagram className="h-4 w-4" />
           </a>
@@ -73,7 +79,7 @@ export function SiteNav() {
           </a>
           <button
             onClick={() => setOpen((v) => !v)}
-            className="lg:hidden inline-flex h-10 w-10 items-center justify-center text-foreground"
+            className={`lg:hidden inline-flex h-10 w-10 items-center justify-center ${text}`}
             aria-label="Toggle menu"
             aria-expanded={open}
           >
