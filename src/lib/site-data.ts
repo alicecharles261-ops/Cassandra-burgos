@@ -4,8 +4,8 @@ export const AGENT = {
   phone: "469-493-6319",
   phoneHref: "tel:+14694936319",
   email: "cburgos@smartcitylocating.com",
-  instagram: "cassandraburgos.realtor",
-  instagramUrl: "https://instagram.com/cassandraburgos.realtor",
+  instagram: "cassandraabigailll",
+  instagramUrl: "https://www.instagram.com/cassandraabigailll?utm_source=ig_web_button_share_sheet&igsh=ZDNlZDc0MzIxNw==",
   location: "Dallas–Fort Worth, TX",
 } as const;
 
