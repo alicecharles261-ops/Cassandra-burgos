@@ -30,7 +30,7 @@ export function SiteNav() {
         "fixed inset-x-0 top-0 z-50 transition-all duration-500 " +
         (scrolled
           ? "bg-white/85 backdrop-blur-xl border-b border-black/5"
-          : "bg-transparent")
+          : "bg-black/20 backdrop-blur-sm border-b border-white/5")
       }
     >
       <div className="container-luxury flex h-20 items-center justify-between">
