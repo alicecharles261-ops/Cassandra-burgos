@@ -57,7 +57,7 @@ const ICONS = [Award, Handshake, HomeIcon, MessageCircle, Clock, Sparkles, Users
 function Home() {
   const { data: props } = useSuspenseQuery(propertiesQuery);
   const { data: reviews } = useSuspenseQuery(reviewsQuery);
-  const { featured, sold, leased, all } = props;
+  const { featured, forSale, sold, leased, all } = props;
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -119,8 +119,44 @@ function Home() {
         </div>
       </section>
 
+      {/* FOR SALE */}
+      <section id="for-sale" className="py-24 md:py-32 bg-muted">
+        <div className="container-luxury">
+          <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-6 mb-14">
+            <div>
+              <p className="gold-rule">Available Now</p>
+              <h2 className="mt-4 font-serif text-4xl md:text-5xl">For Sale Properties</h2>
+            </div>
+            <p className="max-w-md text-sm text-muted-foreground">
+              Explore Cassandra Burgos' current homes available for purchase.
+            </p>
+          </div>
+
+          {forSale.length === 0 ? (
+            <div className="py-20 text-center border border-border bg-background">
+              <p className="font-serif text-2xl text-foreground">No properties currently available</p>
+              <p className="mt-3 text-sm text-muted-foreground max-w-sm mx-auto">
+                No properties are currently available for sale. Please check back soon.
+              </p>
+            </div>
+          ) : (
+            <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3">
+              {forSale.map((p) => (
+                <PropertyCard key={p.slug} p={p} />
+              ))}
+            </div>
+          )}
+
+          <div className="mt-14 text-center">
+            <a href="/properties" className="btn-outline">
+              View All Properties <ArrowRight className="h-4 w-4" />
+            </a>
+          </div>
+        </div>
+      </section>
+
       {/* SOLD */}
-      <section id="sold" className="py-24 md:py-32 bg-muted">
+      <section id="sold" className="py-24 md:py-32">
         <div className="container-luxury">
           <div className="text-center mb-14">
             <p className="gold-rule">Recently Sold</p>

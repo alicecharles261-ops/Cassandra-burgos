@@ -61,9 +61,23 @@ export const listProperties = createServerFn({ method: "GET" }).handler(async ()
     .order("sort_order", { ascending: true })
     .order("created_at", { ascending: true });
   if (error) throw new Error(error.message);
-  const all = (data ?? []).map(toProperty);
+  const rows = data ?? [];
+  const all = rows.map(toProperty);
+  const forSale = rows
+    .filter(
+      (r) =>
+        r.status === "for-sale" &&
+        r.is_published &&
+        !r.is_hidden &&
+        !r.is_draft &&
+        !r.is_archived,
+    )
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+    .slice(0, 6)
+    .map(toProperty);
   return {
-    featured: all.filter((_, i) => (data![i] as PropertyRow).is_featured),
+    featured: all.filter((_, i) => rows[i].is_featured),
+    forSale,
     sold: all.filter((p) => p.status === "sold"),
     leased: all.filter((p) => p.status === "leased"),
     all,
