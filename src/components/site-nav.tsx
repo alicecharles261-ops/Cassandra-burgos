@@ -23,9 +23,9 @@ export function SiteNav() {
           <span className="inline-flex h-11 w-11 items-center justify-center border border-foreground/80 font-serif text-lg tracking-tight text-foreground">
             CB
           </span>
-          <div className="hidden sm:flex flex-col leading-tight">
-            <span className="font-serif text-lg text-foreground">Cassandra Burgos</span>
-            <span className="text-[0.62rem] uppercase tracking-[0.32em] text-muted-foreground">
+          <div className="flex flex-col leading-tight">
+            <span className="font-serif text-base sm:text-lg text-foreground">Cassandra Burgos</span>
+            <span className="text-[0.58rem] sm:text-[0.62rem] uppercase tracking-[0.28em] sm:tracking-[0.32em] text-muted-foreground">
               Real Estate
             </span>
           </div>
